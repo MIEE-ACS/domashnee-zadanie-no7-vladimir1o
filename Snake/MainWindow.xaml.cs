@@ -30,9 +30,16 @@ namespace Snake
         Apple apple;
         //количество очков
         int score;
-        //таймер по которому 
+        //таймер
         DispatcherTimer moveTimer;
-        
+       
+        //дополнительная жизнь (её наличие сейчас, была ли использована до, 
+        //наличие на экране сейчас, врезалась ли во что-то змея)
+        bool IsExtraLife, UseOfExtraLife, ELifeOnlyOnScreen, SmashOrEat;
+        ExtraLife heart;
+        //рандомное целое число до 10
+        int rnd;
+
         //конструктор формы, выполняется при запуске программы
         public MainWindow()
         {
@@ -47,6 +54,10 @@ namespace Snake
             moveTimer.Interval = new TimeSpan(0, 0, 0, 0, 300);
             moveTimer.Tick += new EventHandler(moveTimer_Tick);
             
+            //рандомизируем после какого количества яблок появится сердце
+            Random rand = new Random();
+            rnd = rand.Next(11);
+
         }
 
         //метод перерисовывающий экран
@@ -62,7 +73,7 @@ namespace Snake
             //обновляем положение яблока
             Canvas.SetTop(apple.image, apple.y);
             Canvas.SetLeft(apple.image, apple.x);
-            
+
             //обновляем количество очков
             lblScore.Content = String.Format("{0}000", score);
         }
@@ -71,10 +82,10 @@ namespace Snake
         void moveTimer_Tick(object sender, EventArgs e)
         {
             //в обратном порядке двигаем все элементы змеи
-            foreach (var p in Enumerable.Reverse(snake))
-            {
-                p.move();
-            }
+             foreach (var p in Enumerable.Reverse(snake))
+             {
+                    p.move();
+             }
 
             //проверяем, что голова змеи не врезалась в тело
             foreach (var p in snake.Where(x => x != head))
@@ -82,20 +93,48 @@ namespace Snake
                 //если координаты головы и какой либо из частей тела совпадают
                 if (p.x == head.x && p.y == head.y)
                 {
-                    //мы проиграли
-                    moveTimer.Stop();
-                    tbGameOver.Visibility = Visibility.Visible;
-                    return;
+                    if (IsExtraLife)
+                    {
+                        //если есть доп жизнь
+                        IsExtraLife = false;
+                        UseOfExtraLife = true;
+                        label2.Visibility = Visibility.Hidden;
+                        SmashOrEat = true;
+                        moveTimer.Stop();
+                    }
+                    else
+                    {
+                        //мы проиграли
+                        moveTimer.Stop();
+                        tbGameOver.Visibility = Visibility.Visible;
+                        button1.Visibility = Visibility.Visible;
+                        scoreCanvas.Visibility = Visibility.Hidden;
+                        return;
+                    }
                 }
             }
 
             //проверяем, что голова змеи не вышла за пределы поля
             if (head.x < 40 || head.x >= 540 || head.y < 40 || head.y >= 540)
             {
-                //мы проиграли
-                moveTimer.Stop();
-                tbGameOver.Visibility = Visibility.Visible;
-                return;
+               if (IsExtraLife)
+               {
+                    //если есть доп жизнь
+                    IsExtraLife = false;
+                    UseOfExtraLife = true;
+                    label2.Visibility = Visibility.Hidden;
+                    SmashOrEat = true;
+                    moveTimer.Stop();    
+               }
+                else
+                {
+                    //мы проиграли
+                    moveTimer.Stop();
+                    tbGameOver.Visibility = Visibility.Visible;
+                    button1.Visibility = Visibility.Visible;
+                    scoreCanvas.Visibility = Visibility.Hidden;
+                    return;
+                }
             }
 
             //проверяем, что голова змеи врезалась в яблоко
@@ -110,25 +149,65 @@ namespace Snake
                 canvas1.Children.Add(part.image);
                 snake.Add(part);
             }
+
+            //если жизнь появилась на экране, но не была съедена
+            if (ELifeOnlyOnScreen)
+            {
+                Canvas.SetTop(heart.image, heart.y);
+                Canvas.SetLeft(heart.image, heart.x);
+                if (head.x == heart.x && head.y == heart.y)
+                {
+                    IsExtraLife = true;
+                    ELifeOnlyOnScreen = false;
+                    canvas1.Children.Remove(heart.image);
+                    label2.Visibility = Visibility.Visible;
+                }
+            }
+
+            //иначе если если у нас нет доп жизни и мы её не использовали, 
+            //и счётчик дошёл до какого-то числа
+            else if ((score == rnd)&&(!UseOfExtraLife)&&(!IsExtraLife))
+            {
+                canvas1.Children.Add(heart.image);      
+                heart.move();
+                Canvas.SetTop(heart.image, heart.y);
+                Canvas.SetLeft(heart.image, heart.x);
+                ELifeOnlyOnScreen = true;
+            }
+
             //перерисовываем экран
-            UpdateField();
+            if (!SmashOrEat) { UpdateField(); }
+            //смещаем змею на одну клетку назад
+            else 
+            {
+                foreach (var p in snake)
+                {
+                    p.ifDeadWithElife();
+                }
+                
+            }
         }
 
         // Обработчик нажатия на кнопку клавиатуры
+        //если змея умерла с доп жизнью, то нажатие запускает таймер
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
             switch (e.Key)
             {
                 case Key.Up:
+                    if (SmashOrEat) { SmashOrEat = false; moveTimer.Start(); }
                     head.direction = Head.Direction.UP;
                     break;
                 case Key.Down:
+                    if (SmashOrEat) { SmashOrEat = false; moveTimer.Start(); }
                     head.direction = Head.Direction.DOWN;
                     break;
                 case Key.Left:
+                    if (SmashOrEat) { SmashOrEat = false; moveTimer.Start(); }
                     head.direction = Head.Direction.LEFT;
                     break;
                 case Key.Right:
+                    if (SmashOrEat) { SmashOrEat = false; moveTimer.Start(); }
                     head.direction = Head.Direction.RIGHT;
                     break;
             }
@@ -151,6 +230,7 @@ namespace Snake
             // создаем новое яблоко и добавлем его
             apple = new Apple(snake);
             canvas1.Children.Add(apple.image);
+
             // создаем голову
             head = new Head();
             snake.Add(head);
@@ -159,14 +239,24 @@ namespace Snake
             //запускаем таймер
             moveTimer.Start();
             UpdateField();
+            //скрываем кнопку Start
+            button1.Visibility = Visibility.Hidden;
+            //показываем счёт
+            scoreCanvas.Visibility = Visibility.Visible;
 
+            //доп. жизнь
+            heart = new ExtraLife(snake);
+            IsExtraLife = false;
+            UseOfExtraLife = false;
+            ELifeOnlyOnScreen = false;
+            SmashOrEat = false;
         }
-        
+
         public class Entity
         {
             protected int m_width;
             protected int m_height;
-            
+
             Image m_image;
             public Entity(int w, int h, string image)
             {
@@ -200,6 +290,7 @@ namespace Snake
             }
 
             public virtual void move() { }
+            public virtual void ifDeadWithElife() { }
 
             public int x
             {
@@ -226,7 +317,41 @@ namespace Snake
             }
         }
 
-        public class Apple : PositionedEntity
+        //класс с доп жизнью
+        public class ExtraLife : PositionedEntity
+        {
+            List<PositionedEntity> m_snake;
+            public ExtraLife(List<PositionedEntity> s)
+                : base(0, 0, 40, 40, "D:/domashnee-zadanie-no7-vladimir1o/Snake/Resources/heart.png")
+            {
+                m_snake = s;
+                move();
+            }
+            
+            public override void move()
+            {
+                Random rand = new Random();
+                do
+                {
+                    x = rand.Next(13) * 40 + 40;
+                    y = rand.Next(13) * 40 + 40;
+                    bool overlap = false;
+                    foreach (var p in m_snake)
+                    {
+                        if (p.x == x && p.y == y)
+                        {
+                            overlap = true;
+                            break;
+                        }
+                    }
+                    if (!overlap)
+                        break;
+                } while (true);
+
+            }
+        }
+
+            public class Apple : PositionedEntity
         {
             List<PositionedEntity> m_snake;
             public Apple(List<PositionedEntity> s)
@@ -256,8 +381,8 @@ namespace Snake
                         break;
                 } while (true);
 
+                }
             }
-        }
 
         public class Head : PositionedEntity
         {
@@ -268,7 +393,8 @@ namespace Snake
 
             Direction m_direction;
 
-            public Direction direction {
+            public Direction direction
+            {
                 set
                 {
                     m_direction = value;
@@ -302,22 +428,48 @@ namespace Snake
                         break;
                 }
             }
-        }
 
-        public class BodyPart : PositionedEntity
-        {
-            PositionedEntity m_next;
-            public BodyPart(PositionedEntity next)
-                : base(next.x, next.y, 40, 40, "pack://application:,,,/Resources/body.png")
+            //смещаем на одну клетку назад
+            public override void ifDeadWithElife()
             {
-                m_next = next;
-            }
-
-            public override void move()
-            {
-                x = m_next.x;
-                y = m_next.y;
+                switch (m_direction)
+                {
+                    case Direction.DOWN:
+                        y -= 40;
+                        break;
+                    case Direction.UP:
+                        y += 40;
+                        break;
+                    case Direction.LEFT:
+                        x += 40;
+                        break;
+                    case Direction.RIGHT:
+                        x -= 40;
+                        break;
+                }
             }
         }
+            public class BodyPart : PositionedEntity
+            {
+                PositionedEntity m_next;
+                public BodyPart(PositionedEntity next)
+                    : base(next.x, next.y, 40, 40, "pack://application:,,,/Resources/body.png")
+                {
+                    m_next = next;
+                }
+
+                public override void move()
+                {
+                    x = m_next.x;
+                    y = m_next.y;
+                }
+                public override void ifDeadWithElife()
+                {
+                    x = m_next.x;
+                    y = m_next.y;
+                }
+
+            }
+          
     }
 }
